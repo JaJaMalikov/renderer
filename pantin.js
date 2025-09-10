@@ -55,7 +55,6 @@ function setupPuppetStructure(doc) {
     });
 }
 
-
 export function resetPantin() {
     const obj = document.getElementById('pantin');
     const doc = obj && obj.contentDocument;
@@ -72,16 +71,52 @@ function updateTransform() {
     if (!wrapper.style.transformOrigin) wrapper.style.transformOrigin = '0 0';
 }
 
+// Animation recording / playback
+let frames = [];
+let recording = false;
+let playbackTimer = null;
+let playbackIndex = 0;
+let playbackSpeed = 1; // multiplier
+
+function snapshotTransforms(doc) {
+    const out = {};
+    doc.querySelectorAll('[id]').forEach(el => {
+        const id = el.id;
+        const t = el.getAttribute('transform');
+        if (t) out[id] = t; else out[id] = null;
+    });
+    return out;
+}
+
+function applyTransformsToClone(cloneRoot, transforms) {
+    Object.keys(transforms).forEach(id => {
+        const el = cloneRoot.getElementById && cloneRoot.getElementById(id);
+        if (!el) return;
+        const t = transforms[id];
+        if (t) el.setAttribute('transform', t);
+        else el.removeAttribute('transform');
+    });
+}
+
+function startRecordingIfNeeded(doc) {
+    // Ensure at least frames exist by taking an initial snapshot
+    if (!recording) {
+        frames = [];
+        recording = true;
+        // take an initial snapshot
+        frames.push(snapshotTransforms(doc));
+        // then keep capturing at intervals while user interacts
+        recording = false; // don't run continuous interval; snapshots are pushed on transform change
+    }
+}
+
 export function initPantin(file) {
     const container = document.getElementById('pantin-container');
     wrapper = container.querySelector('#pantin-wrapper');
     if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.id = 'pantin-wrapper';
-        wrapper.style.position = 'absolute';
-        wrapper.style.left = '0';
-        wrapper.style.top = '0';
-        wrapper.style.transformOrigin = '0 0';
+        wrapper.className = 'pantin-wrapper';
         container.appendChild(wrapper);
     } else {
         wrapper.innerHTML = '';
@@ -92,9 +127,9 @@ export function initPantin(file) {
 
     pantinObj = document.createElement('object');
     pantinObj.id = 'pantin';
+    pantinObj.className = 'pantin-object';
     pantinObj.type = 'image/svg+xml';
     pantinObj.data = file ? URL.createObjectURL(file) : './assets/manufutur.svg';
-    pantinObj.style.cssText = 'max-width:500px;min-height:550px;display:block;';
     wrapper.appendChild(pantinObj);
     updateTransform();
 
@@ -129,6 +164,10 @@ export function initPantin(file) {
             const ang = Math.atan2(loc.y - pivot.y, loc.x - pivot.x);
             const d = (ang - start) * 180 / Math.PI;
             seg.setAttribute('transform', `${base} rotate(${d.toFixed(1)},${pivot.x.toFixed(1)},${pivot.y.toFixed(1)})`);
+            // push a snapshot of transforms for recording
+            // throttle a bit by pushing only last snapshot if different
+            const snap = snapshotTransforms(doc);
+            frames.push(snap);
         };
 
         doc.addEventListener('mousedown', e => {
@@ -153,6 +192,8 @@ export function initPantin(file) {
             start = Math.atan2(ed.y - p.y, ed.x - p.x);
             base = (seg.getAttribute('transform') || '').replace(/rotate\([^)]*\)/, '').trim();
             active = true;
+            // record initial state
+            frames.push(snapshotTransforms(doc));
             e.preventDefault();
         });
 
@@ -174,6 +215,17 @@ export function initPantin(file) {
             updateTransform();
         });
         ['mouseup', 'mouseleave'].forEach(evt => container.addEventListener(evt, () => draggingScene = false));
+
+        // expose controls on window
+        window.resetPantin = resetPantin;
+        window.play = play;
+        window.pause = pause;
+        window.setSpeed = setSpeed;
+        window.setZoom = setZoom;
+        window.exportAnimation = exportAnimation;
+
+        // initialize first snapshot
+        frames = [snapshotTransforms(doc)];
     });
 }
 
@@ -181,3 +233,126 @@ export function zoomPantin(factor) {
     scaleFactorScene *= factor;
     updateTransform();
 }
+
+// Playback controls
+function play() {
+    if (!playbackTimer && frames.length > 0) {
+        const fps = 25 * playbackSpeed;
+        const delay = 1000 / fps;
+        playbackIndex = 0;
+        const obj = document.getElementById('pantin');
+        const doc = obj && obj.contentDocument;
+        if (!doc) return;
+        const root = doc.documentElement;
+        playbackTimer = setInterval(() => {
+            if (playbackIndex >= frames.length) {
+                clearInterval(playbackTimer);
+                playbackTimer = null;
+                return;
+            }
+            const trans = frames[playbackIndex];
+            Object.keys(trans).forEach(id => {
+                const el = doc.getElementById(id);
+                if (!el) return;
+                const t = trans[id];
+                if (t) el.setAttribute('transform', t);
+                else el.removeAttribute('transform');
+            });
+            playbackIndex++;
+        }, delay);
+    }
+}
+
+function pause() {
+    if (playbackTimer) {
+        clearInterval(playbackTimer);
+        playbackTimer = null;
+    }
+}
+
+function setSpeed(value) {
+    playbackSpeed = value;
+    // restart playback if running to apply new speed
+    if (playbackTimer) {
+        pause();
+        play();
+    }
+}
+
+function setZoom(value) {
+    scaleFactorScene = value;
+    updateTransform();
+}
+
+// Export animation by rendering frames to an offscreen canvas and recording via MediaRecorder
+async function exportAnimation() {
+    const obj = document.getElementById('pantin');
+    const doc = obj && obj.contentDocument;
+    if (!doc || frames.length === 0) {
+        alert('No animation frames available to export. Interact with the puppet to create frames.');
+        return;
+    }
+
+    // create a clone of the SVG for rendering
+    const root = doc.documentElement;
+    const bbox = root.getBBox();
+    const width = Math.ceil(bbox.width || 500);
+    const height = Math.ceil(bbox.height || 550);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    const stream = canvas.captureStream(25);
+    const recChunks = [];
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+    recorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) recChunks.push(ev.data); };
+
+    recorder.start();
+
+    const fps = 25 * playbackSpeed;
+    const delay = 1000 / fps;
+
+    for (let i = 0; i < frames.length; i++) {
+        ctx.clearRect(0, 0, width, height);
+        const clone = root.cloneNode(true);
+        // apply transforms
+        applyTransformsToClone({ getElementById: (id) => clone.querySelector('#' + id) }, frames[i]);
+        // serialize
+        const svgStr = new XMLSerializer().serializeToString(clone);
+        const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        await drawImageToCanvas(url, ctx, width, height);
+        URL.revokeObjectURL(url);
+        await wait(delay);
+    }
+
+    // stop recorder
+    recorder.stop();
+
+    const blob = await new Promise(resolve => recorder.onstop = () => resolve(new Blob(recChunks, { type: 'video/webm' })));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'puppet-animation.webm';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+function drawImageToCanvas(url, ctx, w, h) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            // white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve();
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
