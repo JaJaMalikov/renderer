@@ -2,6 +2,7 @@ import { initPantin, addKeyframe, getFramesCount, getFrame, applyTransformsToDoc
 
 let selectedElement = null;
 let isRecording = false;
+let recordingTimer = null;
 
 function $(id){return document.getElementById(id)}
 
@@ -21,15 +22,23 @@ window.addEventListener('DOMContentLoaded', () => {
   $('add-keyframe-btn').addEventListener('click', () => {
     const idx = addKeyframe();
     updateFramesUI();
-    if (idx >= 0) $('scrubber').value = idx;
+    if (idx >= 0) { $('scrubber').value = idx; $('scrubber').dispatchEvent(new Event('input')); }
   });
-  $('add-frame-btn').addEventListener('click', () => { const idx = addKeyframe(); updateFramesUI(); if (idx >= 0) $('scrubber').value = idx; });
+  $('add-frame-btn').addEventListener('click', () => { const idx = addKeyframe(); updateFramesUI(); if (idx >= 0) { $('scrubber').value = idx; $('scrubber').dispatchEvent(new Event('input')); } });
 
-  // Record toggle (simple)
+  // Record toggle (continuous)
   $('record-btn').addEventListener('click', (e) => {
     isRecording = !isRecording;
-    e.target.textContent = isRecording ? 'Recording...' : 'Record';
-    if (isRecording) addKeyframe();
+    if (isRecording) {
+      e.target.classList.add('primary');
+      e.target.textContent = 'Recording...';
+      // start continuous keyframe capture every 180ms
+      recordingTimer = setInterval(()=>{ addKeyframe(); updateFramesUI(); }, 180);
+    } else {
+      e.target.classList.remove('primary');
+      e.target.textContent = 'Record';
+      clearInterval(recordingTimer); recordingTimer = null;
+    }
   });
 
   // Play/pause
@@ -52,6 +61,10 @@ window.addEventListener('DOMContentLoaded', () => {
     highlightFrameMarker(idx);
   });
 
+  // Step controls
+  $('step-back').addEventListener('click', ()=>{ const s=$('scrubber'); s.value = Math.max(0, parseInt(s.value||0,10)-1); s.dispatchEvent(new Event('input')); });
+  $('step-forward').addEventListener('click', ()=>{ const s=$('scrubber'); const max = parseInt(s.max||0,10); s.value = Math.min(max, parseInt(s.value||0,10)+1); s.dispatchEvent(new Event('input')); });
+
   // Inspector actions
   $('apply-transform').addEventListener('click', () => {
     if (!selectedElement) return;
@@ -72,14 +85,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Basic new project
   $('new-btn').addEventListener('click', () => { location.reload(); });
+
+  // keyboard shortcuts: Space = play/pause, R = record
+  window.addEventListener('keydown', (ev)=>{
+    if (ev.code === 'Space') { ev.preventDefault(); $('play-pause-main').click(); }
+    if (ev.key.toLowerCase() === 'r') { ev.preventDefault(); $('record-btn').click(); }
+  });
 });
 
 function populateLayers(ids){
   const container = $('layers-list'); container.innerHTML = '';
   ids.forEach(id => {
     const row = document.createElement('div'); row.className = 'layer-item';
-    const left = document.createElement('div'); left.style.display = 'flex'; left.style.alignItems = 'center'; left.style.gap='8px';
-    const name = document.createElement('div'); name.textContent = id; name.style.cursor='pointer'; name.style.color='white';
+    const left = document.createElement('div'); left.style.display = 'flex'; left.style.alignItems = 'center'; left.style.gap='10px';
+    const name = document.createElement('div'); name.textContent = id; name.style.cursor='pointer'; name.className='layer-name';
     name.addEventListener('click', () => selectElement(id));
     left.appendChild(name);
 
@@ -105,7 +124,8 @@ function selectElement(id){ selectedElement = id; $('inspector-id').value = id; 
 
 function updateFramesUI(){
   const count = getFramesCount(); $('frames-count').textContent = count;
-  const scrub = $('scrubber'); scrub.max = Math.max(0, count - 1); scrub.value = Math.min(scrub.value || 0, Math.max(0, count - 1));
+  const scrub = $('scrubber'); scrub.max = Math.max(0, count - 1);
+  scrub.value = Math.min(scrub.value || 0, Math.max(0, count - 1));
   renderFrameMarkers(count);
 }
 
