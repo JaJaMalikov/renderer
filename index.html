@@ -1,74 +1,179 @@
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Pantin Electron</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pantin Studio — Dark Glass</title>
   <style>
-    body {
-      margin: 0;
-      display: flex;
-      height: 100vh;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #f0f2f5;
+    :root{
+      --accent:#49aaff;
+      --accent-2:#6be3ff;
+      --glass-bg:rgba(255,255,255,0.04);
+      --glass-border:rgba(255,255,255,0.06);
+      --muted:rgba(230,238,246,0.7);
+      --panel-glow:0 8px 30px rgba(30,120,200,0.12);
+      --radius:12px;
+      --mono: 'SFMono-Regular', ui-monospace, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
     }
-    aside {
-      width: 230px;
-      background: #fafafa;
-      padding: 15px;
-      box-shadow: 2px 0 8px rgba(0,0,0,0.15);
-    }
-    #pantin-container {
-      position: relative;
-      flex: 1;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #fff;
-    }
-    button, input[type=file] {
-      width: 100%;
-      margin-bottom: 10px;
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      background: #4a90e2;
-      color: #fff;
-      cursor: pointer;
-    }
-    input[type=range] {
-      width: 100%;
-      margin-bottom: 10px;
-    }
-    #grid-overlay {
-      pointer-events: none;
-      position: absolute;
-      inset: 0;
-      background-size: 40px 40px;
-      background-image:
-        linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px);
-      display: none;
-    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#05060a 0%, #071021 55%, #071528 100%);color:#eaf6ff}
+
+    .app-shell{display:grid;grid-template-columns:260px 1fr 340px;grid-template-rows:64px 1fr 200px;gap:16px;padding:18px;height:100vh}
+
+    /* Toolbar */
+    .toolbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));backdrop-filter:blur(6px);border:1px solid var(--glass-border);box-shadow:var(--panel-glow)}
+    .tool-group{display:flex;gap:8px;align-items:center}
+    .tool-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;font-weight:600;transition:all .18s ease}
+    .tool-btn:hover{color:var(--accent);transform:translateY(-2px);background:rgba(255,255,255,0.01);border-color:rgba(255,255,255,0.03)}
+    .tool-btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#001126;border:1px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(41,133,200,0.2)}
+    .tool-icon{width:16px;height:16px;display:inline-block;opacity:0.95}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:var(--muted)}
+
+    /* Panels */
+    .panel{background:var(--glass-bg);border-radius:var(--radius);padding:12px;border:1px solid var(--glass-border);box-shadow:var(--panel-glow)}
+    .left-panel{grid-column:1/2;grid-row:2/3;display:flex;flex-direction:column;gap:10px}
+    .center-stage{grid-column:2/3;grid-row:2/3;display:flex;align-items:center;justify-content:center}
+    .right-panel{grid-column:3/4;grid-row:2/3;display:flex;flex-direction:column;gap:10px}
+    .timeline{grid-column:1/-1;grid-row:3/4}
+
+    /* Layers */
+    .layers-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .layers-list{overflow:auto;max-height:68vh;padding-right:6px}
+    .layer-item{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;margin-bottom:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);transition:all .12s}
+    .layer-item:hover{transform:translateX(4px);background:linear-gradient(90deg, rgba(255,255,255,0.014), rgba(255,255,255,0.01))}
+    .layer-name{font-size:13px;color:#eaf6ff}
+    .layer-controls{display:flex;gap:8px;align-items:center}
+
+    /* Stage */
+    .stage-shell{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
+    #pantin-container{width:88%;height:88%;border-radius:12px;background:linear-gradient(180deg,#041425,#02121a);display:flex;align-items:center;justify-content:center;position:relative;border:1px solid rgba(255,255,255,0.03)}
+    #grid-overlay{pointer-events:none;position:absolute;inset:0;background-size:40px 40px;background-image:linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);display:none;border-radius:10px}
+    .pantin-wrapper{position:absolute;left:0;top:0;transform-origin:0 0}
+    .pantin-object{max-width:720px;max-height:720px;display:block;filter:drop-shadow(0 10px 30px rgba(0,0,0,0.6))}
+
+    /* Inspector */
+    .inspector-row{display:flex;flex-direction:column;margin-bottom:10px}
+    label{font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=text], textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+    .muted{color:var(--muted);font-size:12px}
+
+    /* Timeline */
+    .timeline-panel{display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px}
+    #scrubber{width:60%}
+    .frame-markers{height:54px;margin-top:10px;display:flex;align-items:center;gap:8px;overflow:auto;padding:8px}
+    .frame-dot{width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.02);cursor:pointer}
+    .frame-dot.active{background:var(--accent);box-shadow:0 6px 18px rgba(73,170,255,0.14)}
+
+    /* Footer / small */
+    .small{font-size:12px;color:var(--muted)}
+
+    /* responsive */
+    @media (max-width:1000px){.app-shell{grid-template-columns:1fr;grid-template-rows:64px 1fr 340px;gap:12px;padding:12px}.left-panel,.right-panel{display:none}.toolbar{overflow:auto}}
   </style>
 </head>
 <body>
-  <aside>
-    <input id="file-input" type="file" accept=".svg" />
-    <button id="reset-btn">Reset position</button>
-    <button id="export-btn">Exporter GIF</button>
-    <label for="play-pause">Play/Pause</label>
-    <button id="play-pause-btn">Play</button>
-    <label for="speed-range">Vitesse</label>
-    <input id="speed-range" type="range" min="0.5" max="2" step="0.1" value="1" />
-    <label for="zoom-range">Zoom</label>
-    <input id="zoom-range" type="range" min="0.5" max="2" step="0.1" value="1" />
-    <button id="grid-btn">Grille</button>
-    <button id="bg-color-btn">Couleur scène</button>
+  <div class="app-shell">
+    <div class="toolbar">
+      <div class="tool-group">
+        <button id="new-btn" class="tool-btn" title="Nouveau">
+          <svg class="tool-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          New
+        </button>
 
-  </aside>
-  <div id="pantin-container">
-    <div id="grid-overlay"></div>
+        <label for="file-input" class="tool-btn" title="Importer SVG">
+          <svg class="tool-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v12M7 8l5-5 5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Import
+        </label>
+        <input id="file-input" type="file" accept=".svg" style="display:none" />
+
+        <button id="add-keyframe-btn" class="tool-btn primary" title="Ajouter keyframe">
+          <svg class="tool-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v18M3 12h18" stroke="#001126" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Keyframe
+        </button>
+
+        <button id="record-btn" class="tool-btn" title="Enregistrer">
+          <svg class="tool-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="6" fill="#ff5c5c"/></svg>
+          Record
+        </button>
+
+        <button id="play-pause-main" class="tool-btn" title="Play/Pause">
+          <svg id="play-icon" class="tool-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 6v12l10-6L7 6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Play
+        </button>
+
+        <button id="export-btn" class="tool-btn" title="Exporter">
+          <svg class="tool-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v12M8 7l4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Export
+        </button>
+      </div>
+
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <div class="pill small">Theme: Dark Glass</div>
+        <div class="small muted">Speed</div>
+        <input id="speed-range" type="range" min="0.5" max="2" step="0.1" value="1" style="width:160px">
+      </div>
+    </div>
+
+    <div class="panel left-panel">
+      <div class="layers-header">
+        <strong style="font-size:15px">Layers</strong>
+        <div class="small muted">Auto</div>
+      </div>
+      <div class="layers-list" id="layers-list"></div>
+    </div>
+
+    <div class="panel center-stage">
+      <div class="stage-shell">
+        <div id="pantin-container">
+          <div id="grid-overlay"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel right-panel">
+      <strong style="font-size:15px">Inspector</strong>
+      <div class="inspector-row">
+        <label>Selected</label>
+        <input id="inspector-id" type="text" readonly />
+      </div>
+      <div class="inspector-row">
+        <label>Transform</label>
+        <input id="inspector-transform" type="text" />
+      </div>
+      <div class="inspector-row">
+        <label>Actions</label>
+        <div style="display:flex;gap:8px"><button id="apply-transform" class="tool-btn">Apply</button><button id="reset-transform" class="tool-btn">Reset</button></div>
+      </div>
+    </div>
+
+    <div class="timeline" style="grid-column:1/-1">
+      <div class="panel timeline-panel">
+        <div style="display:flex;flex-direction:column;flex:1">
+          <div style="display:flex;align-items:center;gap:12px">
+            <strong>Timeline</strong>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+              <button id="add-frame-btn" class="tool-btn">Add Frame</button>
+              <div class="small muted">Frames: <span id="frames-count">0</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+            <input id="scrubber" type="range" min="0" max="0" value="0" />
+            <div style="width:220px;display:flex;flex-direction:column;align-items:flex-start">
+              <div class="small muted">Preview</div>
+              <div style="display:flex;gap:8px;margin-top:8px" id="playback-controls">
+                <button id="step-back" class="tool-btn">◀</button>
+                <button id="step-forward" class="tool-btn">▶</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="frame-markers" id="frame-markers"></div>
+        </div>
+      </div>
+    </div>
   </div>
+
   <script type="module" src="renderer.js"></script>
 </body>
 </html>
